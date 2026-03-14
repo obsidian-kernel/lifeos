@@ -5,6 +5,10 @@ import 'package:drift/native.dart';
 import 'package:path/path.dart' as p;
 import 'package:path_provider/path_provider.dart';
 
+import '../../features/music/data/daos/music_dao.dart';
+import '../../features/music/data/models/playlist_table.dart';
+import '../../features/music/data/models/playlist_track_table.dart';
+import '../../features/music/data/models/track_table.dart';
 import '../../features/tasks/data/daos/project_dao.dart';
 import '../../features/tasks/data/daos/task_dao.dart';
 import '../../features/tasks/data/models/project_table.dart';
@@ -16,15 +20,25 @@ import 'migrations/migration_strategy.dart';
 part 'app_database.g.dart';
 
 @DriftDatabase(
-  tables: [TaskItems, Projects, Tags, TaskTags],
-  daos: [TaskDao, ProjectDao],
+  tables: [
+    // Tasks
+    TaskItems,
+    Projects,
+    Tags,
+    TaskTags,
+    // Music
+    Tracks,
+    Playlists,
+    PlaylistTracks,
+  ],
+  daos: [TaskDao, ProjectDao, MusicDao],
 )
 class AppDatabase extends _$AppDatabase {
   AppDatabase() : super(_openProductionConnection());
   AppDatabase.forTesting() : super(_openTestingConnection());
 
   @override
-  int get schemaVersion => 2;
+  int get schemaVersion => 3;
 
   @override
   MigrationStrategy get migration => buildMigrationStrategy(this);
