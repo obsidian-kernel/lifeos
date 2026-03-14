@@ -1,10 +1,10 @@
-/// UTC enforcement policy for LifeOS.
-///
-/// Rule: Every DateTime written to the database is UTC.
-///       Every DateTime read from the database is treated as UTC.
-///       Conversion to local time happens ONLY at the presentation layer.
-///
-/// This prevents timezone-related query bugs across 100k+ records over years.
+// UTC enforcement policy for LifeOS.
+//
+// Rule: Every DateTime written to the database is UTC.
+//       Every DateTime read from the database is treated as UTC.
+//       Conversion to local time happens ONLY at the presentation layer.
+//
+// This prevents timezone-related query bugs across 100k+ records over years.
 
 extension DateTimeUtcExtension on DateTime {
   /// Converts to UTC if not already UTC. Use before every DB write.

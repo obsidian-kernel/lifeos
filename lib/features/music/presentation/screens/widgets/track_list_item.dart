@@ -6,6 +6,8 @@ import '../../../../../core/theme/app_typography.dart';
 import '../../../domain/entities/track_entity.dart';
 import '../../providers/music_providers.dart';
 
+enum _TrackAction { playNext, addToQueue, addToPlaylist }
+
 class TrackListItem extends ConsumerWidget {
   const TrackListItem({
     super.key,
@@ -44,6 +46,7 @@ class TrackListItem extends ConsumerWidget {
             const SizedBox(width: 12),
             Expanded(child: _buildInfo()),
             _buildDuration(),
+            _buildMenu(context, ref),
           ],
         ),
       ),
@@ -116,5 +119,72 @@ class TrackListItem extends ConsumerWidget {
         color: AppColors.onSurfaceMuted,
       ),
     );
+  }
+
+  Widget _buildMenu(BuildContext context, WidgetRef ref) {
+    return PopupMenuButton<_TrackAction>(
+      onSelected: (action) {
+        final actions = ref.read(playerActionsProvider.notifier);
+        switch (action) {
+          case _TrackAction.playNext:
+            actions.playNext(track);
+          case _TrackAction.addToQueue:
+            actions.addToQueue(track);
+          case _TrackAction.addToPlaylist:
+            _showPlaylistPicker(context, ref);
+        }
+      },
+      itemBuilder: (context) => const [
+        PopupMenuItem(
+          value: _TrackAction.playNext,
+          child: Text('Play next'),
+        ),
+        PopupMenuItem(
+          value: _TrackAction.addToQueue,
+          child: Text('Add to queue'),
+        ),
+        PopupMenuItem(
+          value: _TrackAction.addToPlaylist,
+          child: Text('Add to playlist'),
+        ),
+      ],
+      icon: const Icon(Icons.more_vert, color: AppColors.onSurfaceMuted),
+    );
+  }
+
+  Future<void> _showPlaylistPicker(
+      BuildContext context, WidgetRef ref) async {
+    final repo = ref.read(musicRepositoryProvider);
+    final result = await repo.getPlaylists();
+    final playlists = result.valueOrNull ?? [];
+    if (playlists.isEmpty) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('No playlists yet. Create one first.')),
+        );
+      }
+      return;
+    }
+    if (!context.mounted) return;
+    final selected = await showModalBottomSheet<String>(
+      context: context,
+      builder: (_) => ListView(
+        children: playlists
+            .map((p) => ListTile(
+                  title: Text(p.name),
+                  onTap: () => Navigator.of(context).pop(p.id),
+                ))
+            .toList(),
+      ),
+    );
+    if (selected == null) return;
+    await ref
+        .read(playerActionsProvider.notifier)
+        .addToPlaylist(selected, track.id);
+    if (context.mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Added to playlist')),
+      );
+    }
   }
 }

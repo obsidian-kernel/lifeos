@@ -7,7 +7,7 @@ part of 'music_providers.dart';
 // **************************************************************************
 
 String _$audioPlayerServiceHash() =>
-    r'8618dd4365bd811f0008585ea92bbd5abb25dd51';
+    r'857f35c1623853a14b030cd8f6bb6d140e0b072d';
 
 /// See also [audioPlayerService].
 @ProviderFor(audioPlayerService)
@@ -164,7 +164,7 @@ final musicScanStateProvider =
 );
 
 typedef _$MusicScanState = AutoDisposeNotifier<AsyncValue<int?>>;
-String _$playerActionsHash() => r'7f240a19884b663c045d6b939017c339e9b71b18';
+String _$playerActionsHash() => r'47daf5eb33a8ad6c1dbef3bb939cfe4fbbeaf64c';
 
 /// See also [PlayerActions].
 @ProviderFor(PlayerActions)
@@ -180,5 +180,21 @@ final playerActionsProvider =
 );
 
 typedef _$PlayerActions = AutoDisposeNotifier<void>;
+String _$playlistActionsHash() => r'77f0be35cb5a88f73fd9cd16f3dbcf91d0b68fcd';
+
+/// See also [PlaylistActions].
+@ProviderFor(PlaylistActions)
+final playlistActionsProvider =
+    AutoDisposeNotifierProvider<PlaylistActions, void>.internal(
+  PlaylistActions.new,
+  name: r'playlistActionsProvider',
+  debugGetCreateSourceHash: const bool.fromEnvironment('dart.vm.product')
+      ? null
+      : _$playlistActionsHash,
+  dependencies: null,
+  allTransitiveDependencies: null,
+);
+
+typedef _$PlaylistActions = AutoDisposeNotifier<void>;
 // ignore_for_file: type=lint
 // ignore_for_file: subtype_of_sealed_class, invalid_use_of_internal_member, invalid_use_of_visible_for_testing_member, deprecated_member_use_from_same_package

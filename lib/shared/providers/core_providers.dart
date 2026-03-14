@@ -22,7 +22,7 @@ AppDatabase appDatabase(Ref ref) {
 NotificationService notificationService(Ref ref) {
   final service = NotificationServiceImpl();
   ref.onDispose(() {
-    (service as NotificationServiceImpl).dispose();
+    service.dispose();
   });
   return service;
 }

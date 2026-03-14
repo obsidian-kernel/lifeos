@@ -16,6 +16,7 @@ extension TrackRowToEntity on Track {
       genre: genre,
       year: year,
       durationMs: durationMs,
+      lastPositionMs: lastPositionMs,
       fileSizeBytes: fileSizeBytes,
       extension: extension,
       isAvailable: isAvailable,
@@ -25,6 +26,7 @@ extension TrackRowToEntity on Track {
           : null,
       indexedAt: DateTime.fromMillisecondsSinceEpoch(indexedAt, isUtc: true),
       sortOrder: sortOrder,
+      artworkPath: artworkPath,
     );
   }
 }
@@ -41,6 +43,7 @@ extension TrackEntityToCompanion on TrackEntity {
       genre: Value(genre),
       year: Value(year),
       durationMs: Value(durationMs),
+      lastPositionMs: Value(lastPositionMs),
       fileSizeBytes: Value(fileSizeBytes),
       extension: Value(extension),
       isAvailable: Value(isAvailable),
@@ -48,6 +51,7 @@ extension TrackEntityToCompanion on TrackEntity {
       lastPlayedAt: Value(lastPlayedAt?.millisecondsSinceEpoch),
       indexedAt: Value(indexedAt.millisecondsSinceEpoch),
       sortOrder: Value(sortOrder),
+      artworkPath: Value(artworkPath),
     );
   }
 }

@@ -41,7 +41,7 @@ enum NotificationRecurrence {
 ///
 /// Design decisions:
 /// - Abstract interface. Platform implementations live in impl/.
-/// - All methods return Result<T> — no raw exceptions surface to callers.
+/// - All methods return `Result<T>` — no raw exceptions surface to callers.
 /// - Stream-based tap handling — callers subscribe, not poll.
 /// - Notification IDs are caller-managed (derived from entity UUIDs).
 ///   This allows deterministic cancellation without storing notification IDs.

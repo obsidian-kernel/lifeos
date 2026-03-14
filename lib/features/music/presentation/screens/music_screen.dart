@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
-import '../../../../core/services/file_system_service.dart';
 import '../../../../core/theme/app_colors.dart';
 import '../../../../core/theme/app_typography.dart';
 import '../../../../shared/providers/core_providers.dart';
+import '../../domain/entities/playlist_entity.dart';
 import '../../domain/entities/track_entity.dart';
 import '../providers/music_providers.dart';
 import 'widgets/mini_player.dart';
@@ -56,6 +56,7 @@ class _MusicBodyState extends ConsumerState<_MusicBody> {
 
   Widget _buildTopBar() {
     final scanState = ref.watch(musicScanStateProvider);
+    final mode = ref.watch(musicViewModeNotifierProvider);
     return Container(
       height: 56,
       padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -113,6 +114,13 @@ class _MusicBodyState extends ConsumerState<_MusicBody> {
                   color: AppColors.accent, size: 20),
               tooltip: 'Add music folder',
               onPressed: () => _pickAndScanDirectory(context),
+            ),
+          if (!_searchActive && mode == MusicViewMode.playlists)
+            IconButton(
+              icon: const Icon(Icons.playlist_add_rounded,
+                  color: AppColors.accent, size: 22),
+              tooltip: 'Create playlist',
+              onPressed: _promptNewPlaylist,
             ),
         ],
       ),
@@ -323,15 +331,41 @@ class _MusicBodyState extends ConsumerState<_MusicBody> {
                 child: const Icon(Icons.queue_music_rounded,
                     size: 20, color: AppColors.onSurfaceMuted),
               ),
-              title: Text(p.name,
-                  style: AppTypography.bodyLarge
-                      .copyWith(color: AppColors.onBackground)),
+              title: Text(
+                p.name,
+                style: AppTypography.bodyLarge
+                    .copyWith(color: AppColors.onBackground),
+              ),
               subtitle: Text(
                 '${p.trackCount} tracks',
                 style: AppTypography.labelSmall
                     .copyWith(color: AppColors.onSurfaceMuted),
               ),
-              onTap: () {}, // Navigate to playlist detail — Phase 5b
+              onTap: () => _playPlaylist(p),
+              trailing: PopupMenuButton<String>(
+                icon: const Icon(Icons.more_vert,
+                    color: AppColors.onSurfaceMuted),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'rename':
+                      _promptRenamePlaylist(p);
+                      break;
+                    case 'delete':
+                      _deletePlaylist(p.id);
+                      break;
+                  }
+                },
+                itemBuilder: (_) => const [
+                  PopupMenuItem(
+                    value: 'rename',
+                    child: Text('Rename'),
+                  ),
+                  PopupMenuItem(
+                    value: 'delete',
+                    child: Text('Delete'),
+                  ),
+                ],
+              ),
             );
           },
         );
@@ -342,6 +376,87 @@ class _MusicBodyState extends ConsumerState<_MusicBody> {
     );
   }
 
+  Future<void> _promptNewPlaylist() async {
+    final name = await _promptForText('New playlist');
+    if (name == null || name.trim().isEmpty) return;
+    final result =
+        await ref.read(playlistActionsProvider.notifier).create(name.trim());
+    result.fold(
+      onSuccess: (_) => _showMessage('Playlist created'),
+      onFailure: (e) => _showMessage('Failed: ${e.message}'),
+    );
+  }
+
+  Future<void> _promptRenamePlaylist(PlaylistEntity playlist) async {
+    final name =
+        await _promptForText('Rename playlist', initial: playlist.name);
+    if (name == null || name.trim().isEmpty) return;
+    final result = await ref
+        .read(playlistActionsProvider.notifier)
+        .rename(playlist.id, name.trim());
+    result.fold(
+      onSuccess: (_) => _showMessage('Renamed'),
+      onFailure: (e) => _showMessage('Failed: ${e.message}'),
+    );
+  }
+
+  Future<void> _deletePlaylist(String id) async {
+    final result =
+        await ref.read(playlistActionsProvider.notifier).delete(id);
+    result.fold(
+      onSuccess: (_) => _showMessage('Playlist deleted'),
+      onFailure: (e) => _showMessage('Failed: ${e.message}'),
+    );
+  }
+
+  Future<void> _playPlaylist(PlaylistEntity playlist) async {
+    final result =
+        await ref.read(playlistActionsProvider.notifier).tracks(playlist.id);
+    final tracks = result.fold(
+      onSuccess: (t) => t,
+      onFailure: (_) => <TrackEntity>[],
+    );
+    if (tracks.isEmpty) {
+      _showMessage('Playlist is empty or failed to load');
+      return;
+    }
+    await ref
+        .read(playerActionsProvider.notifier)
+        .playQueue(tracks, startIndex: 0);
+  }
+
+  Future<String?> _promptForText(String title, {String initial = ''}) async {
+    return showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        final controller = TextEditingController(text: initial);
+        return AlertDialog(
+          title: Text(title),
+          content: TextField(
+            controller: controller,
+            autofocus: true,
+            decoration: const InputDecoration(hintText: 'Name'),
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Cancel'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+              child: const Text('Save'),
+            ),
+          ],
+        );
+      },
+    );
+  }
+
+  void _showMessage(String msg) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(content: Text(msg)),
+    );
+  }
   Widget _buildEmptyLibrary() {
     return Center(
       child: Column(

@@ -66,6 +66,16 @@ class MusicDao extends DatabaseAccessor<AppDatabase> with _$MusicDaoMixin {
         const TracksCompanion(isAvailable: Value(true)),
       );
 
+  Future<void> updateTrackDuration(String id, int durationMs) =>
+      (update(tracks)..where((t) => t.id.equals(id))).write(
+        TracksCompanion(durationMs: Value(durationMs)),
+      );
+
+  Future<void> updateLastPosition(String id, int positionMs) =>
+      (update(tracks)..where((t) => t.id.equals(id))).write(
+        TracksCompanion(lastPositionMs: Value(positionMs)),
+      );
+
   Future<void> incrementPlayCount(String id, int nowMs) =>
       customUpdate(
         'UPDATE tracks SET play_count = play_count + 1, last_played_at = ? WHERE id = ?',

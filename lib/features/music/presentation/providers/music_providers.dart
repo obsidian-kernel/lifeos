@@ -2,6 +2,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:riverpod_annotation/riverpod_annotation.dart';
 
 import '../../../../shared/providers/core_providers.dart';
+import '../../../../core/error/result.dart';
 import '../../data/repositories/music_repository_impl.dart';
 import '../../data/services/audio_player_service.dart';
 import '../../domain/entities/playlist_entity.dart';
@@ -14,7 +15,8 @@ part 'music_providers.g.dart';
 
 @Riverpod(keepAlive: true)
 AudioPlayerService audioPlayerService(Ref ref) {
-  final service = AudioPlayerService();
+  final repo = ref.watch(musicRepositoryProvider);
+  final service = AudioPlayerService(repo);
   ref.onDispose(service.dispose);
   return service;
 }
@@ -136,4 +138,35 @@ class PlayerActions extends _$PlayerActions {
   Future<void> seekTo(Duration position) => _service.seekTo(position);
   void toggleShuffle() => _service.toggleShuffle();
   void cycleRepeatMode() => _service.cycleRepeatMode();
+  void addToQueue(TrackEntity track) => _service.addToQueue(track);
+  void playNext(TrackEntity track) => _service.addNext(track);
+  void removeFromQueue(int index) => _service.removeFromQueue(index);
+  void moveInQueue(int oldIndex, int newIndex) =>
+      _service.moveInQueue(oldIndex, newIndex);
+  Future<void> playFromQueue(int index) => _service.playFromQueue(index);
+
+  Future<void> addToPlaylist(String playlistId, String trackId) =>
+      _repo.addTrackToPlaylist(playlistId, trackId);
+}
+
+// ── Playlist actions ──────────────────────────────────────────────────────
+
+@riverpod
+class PlaylistActions extends _$PlaylistActions {
+  @override
+  void build() {}
+
+  MusicRepository get _repo => ref.read(musicRepositoryProvider);
+
+  Future<Result<void>> create(String name) async =>
+      (await _repo.createPlaylist(name))
+          .fold(onSuccess: (_) => const Success(null), onFailure: Failure.new);
+
+  Future<Result<void>> rename(String id, String name) async =>
+      (await _repo.renamePlaylist(id, name))
+          .fold(onSuccess: (_) => const Success(null), onFailure: Failure.new);
+
+  Future<Result<void>> delete(String id) => _repo.deletePlaylist(id);
+  Future<Result<List<TrackEntity>>> tracks(String playlistId) =>
+      _repo.getPlaylistTracks(playlistId);
 }

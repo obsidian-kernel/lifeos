@@ -21,6 +21,7 @@ class TrackEntity extends Equatable {
     this.genre,
     this.year,
     required this.durationMs,
+    this.lastPositionMs = 0,
     required this.fileSizeBytes,
     required this.extension,
     required this.isAvailable,
@@ -28,6 +29,7 @@ class TrackEntity extends Equatable {
     this.lastPlayedAt,
     required this.indexedAt,
     this.sortOrder = 0,
+    this.artworkPath,
   });
 
   final String id;
@@ -39,6 +41,7 @@ class TrackEntity extends Equatable {
   final String? genre;
   final int? year;
   final int durationMs;
+  final int lastPositionMs;
   final int fileSizeBytes;
   final String extension; // mp3, flac, etc.
   final bool isAvailable; // false = file missing from disk
@@ -46,8 +49,10 @@ class TrackEntity extends Equatable {
   final DateTime? lastPlayedAt; // UTC
   final DateTime indexedAt;     // UTC
   final int sortOrder;
+  final String? artworkPath;
 
   Duration get duration => Duration(milliseconds: durationMs);
+  Duration get lastPosition => Duration(milliseconds: lastPositionMs);
 
   String get displayArtist => artist ?? 'Unknown Artist';
   String get displayAlbum => album ?? 'Unknown Album';
@@ -60,11 +65,13 @@ class TrackEntity extends Equatable {
     String? genre,
     int? year,
     int? durationMs,
+    int? lastPositionMs,
     int? fileSizeBytes,
     bool? isAvailable,
     int? playCount,
     DateTime? lastPlayedAt,
     int? sortOrder,
+    String? artworkPath,
     bool clearLastPlayedAt = false,
   }) {
     return TrackEntity(
@@ -77,6 +84,7 @@ class TrackEntity extends Equatable {
       genre: genre ?? this.genre,
       year: year ?? this.year,
       durationMs: durationMs ?? this.durationMs,
+      lastPositionMs: lastPositionMs ?? this.lastPositionMs,
       fileSizeBytes: fileSizeBytes ?? this.fileSizeBytes,
       extension: extension,
       isAvailable: isAvailable ?? this.isAvailable,
@@ -85,13 +93,14 @@ class TrackEntity extends Equatable {
           clearLastPlayedAt ? null : lastPlayedAt ?? this.lastPlayedAt,
       indexedAt: indexedAt,
       sortOrder: sortOrder ?? this.sortOrder,
+      artworkPath: artworkPath ?? this.artworkPath,
     );
   }
 
   @override
   List<Object?> get props => [
         id, path, title, artist, album, albumArtist,
-        genre, year, durationMs, fileSizeBytes, extension,
-        isAvailable, playCount, lastPlayedAt, indexedAt, sortOrder,
+        genre, year, durationMs, lastPositionMs, fileSizeBytes, extension,
+        isAvailable, playCount, lastPlayedAt, indexedAt, sortOrder, artworkPath,
       ];
 }

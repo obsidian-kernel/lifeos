@@ -13,8 +13,6 @@ import '../../domain/entities/track_entity.dart';
 import '../../domain/repositories/music_repository.dart';
 import '../daos/music_dao.dart';
 import '../models/music_mapper.dart';
-import '../models/playlist_track_table.dart';
-import '../models/playlist_table.dart';
 
 class MusicRepositoryImpl implements MusicRepository {
   MusicRepositoryImpl({
@@ -177,6 +175,36 @@ class MusicRepositoryImpl implements MusicRepository {
       return Success(null);
     } catch (e) {
       return Failure(DatabaseError('Failed to record play: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> setTrackDuration(String trackId, int durationMs) async {
+    try {
+      await _musicDao.updateTrackDuration(trackId, durationMs);
+      return Success(null);
+    } catch (e) {
+      return Failure(DatabaseError('Failed to update duration: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> setLastPosition(String trackId, int positionMs) async {
+    try {
+      await _musicDao.updateLastPosition(trackId, positionMs);
+      return Success(null);
+    } catch (e) {
+      return Failure(DatabaseError('Failed to update last position: $e'));
+    }
+  }
+
+  @override
+  Future<Result<void>> markTrackUnavailable(String trackId) async {
+    try {
+      await _musicDao.markUnavailable(trackId);
+      return Success(null);
+    } catch (e) {
+      return Failure(DatabaseError('Failed to mark unavailable: $e'));
     }
   }
 

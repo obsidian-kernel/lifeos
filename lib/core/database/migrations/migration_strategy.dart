@@ -9,6 +9,9 @@ MigrationStrategy buildMigrationStrategy(AppDatabase db) {
       await _createTaskIndexes(db);
       await _createMusicFts5(db);
       await _createMusicIndexes(db);
+      await _createJournalFts5(db);
+      await _createJournalIndexes(db);
+      await _createHabitIndexes(db);
     },
     onUpgrade: (m, from, to) async {
       // V1→V2: Initial task tables
@@ -27,6 +30,23 @@ MigrationStrategy buildMigrationStrategy(AppDatabase db) {
         await m.createTable(db.playlistTracks);
         await _createMusicFts5(db);
         await _createMusicIndexes(db);
+      }
+      // V3→V4: Track artwork + last position
+      if (from < 4) {
+        await m.addColumn(db.tracks, db.tracks.artworkPath);
+        await m.addColumn(db.tracks, db.tracks.lastPositionMs);
+      }
+      // V4→V5: Journal table + FTS
+      if (from < 5) {
+        await m.createTable(db.journalEntries);
+        await _createJournalFts5(db);
+        await _createJournalIndexes(db);
+      }
+      // V5→V6: Habits + Habit logs
+      if (from < 6) {
+        await m.createTable(db.habits);
+        await m.createTable(db.habitLogs);
+        await _createHabitIndexes(db);
       }
     },
     beforeOpen: (details) async {
@@ -137,4 +157,58 @@ Future<void> _createMusicIndexes(AppDatabase db) async {
       'CREATE INDEX IF NOT EXISTS idx_tracks_last_played ON tracks(last_played_at)');
   await db.customStatement(
       'CREATE INDEX IF NOT EXISTS idx_playlist_tracks_playlist_id ON playlist_tracks(playlist_id)');
+}
+
+// ── Journal FTS5 ──────────────────────────────────────────────────────────
+
+Future<void> _createJournalFts5(AppDatabase db) async {
+  await db.customStatement('''
+    CREATE VIRTUAL TABLE IF NOT EXISTS journal_fts
+    USING fts5(
+      title, body,
+      content=journal_entries,
+      content_rowid=rowid
+    )
+  ''');
+  await db.customStatement('''
+    CREATE TRIGGER IF NOT EXISTS journal_fts_insert
+    AFTER INSERT ON journal_entries BEGIN
+      INSERT INTO journal_fts(rowid, title, body)
+      VALUES (new.rowid, new.title, new.body);
+    END
+  ''');
+  await db.customStatement('''
+    CREATE TRIGGER IF NOT EXISTS journal_fts_update
+    AFTER UPDATE ON journal_entries BEGIN
+      INSERT INTO journal_fts(journal_fts, rowid, title, body)
+      VALUES ('delete', old.rowid, old.title, old.body);
+      INSERT INTO journal_fts(rowid, title, body)
+      VALUES (new.rowid, new.title, new.body);
+    END
+  ''');
+  await db.customStatement('''
+    CREATE TRIGGER IF NOT EXISTS journal_fts_delete
+    AFTER DELETE ON journal_entries BEGIN
+      INSERT INTO journal_fts(journal_fts, rowid, title, body)
+      VALUES ('delete', old.rowid, old.title, old.body);
+    END
+  ''');
+}
+
+Future<void> _createJournalIndexes(AppDatabase db) async {
+  await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_journal_date ON journal_entries(entry_date DESC)');
+  await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_journal_mood ON journal_entries(mood)');
+}
+
+// ── Habits Indexes ────────────────────────────────────────────────────────
+
+Future<void> _createHabitIndexes(AppDatabase db) async {
+  await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_habits_archived ON habits(is_archived)');
+  await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_habit_logs_habit ON habit_logs(habit_id)');
+  await db.customStatement(
+      'CREATE INDEX IF NOT EXISTS idx_habit_logs_date ON habit_logs(logged_at)');
 }

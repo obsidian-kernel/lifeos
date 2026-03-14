@@ -19,8 +19,10 @@ class Tracks extends Table {
       boolean().withDefault(const Constant(true))();
   IntColumn get playCount => integer().withDefault(const Constant(0))();
   IntColumn get lastPlayedAt => integer().nullable()();
+  IntColumn get lastPositionMs => integer().withDefault(const Constant(0))();
   IntColumn get indexedAt => integer()();
   IntColumn get sortOrder => integer().withDefault(const Constant(0))();
+  TextColumn get artworkPath => text().nullable()();
 
   @override
   Set<Column> get primaryKey => {id};

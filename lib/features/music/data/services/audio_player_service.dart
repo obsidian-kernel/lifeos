@@ -1,8 +1,13 @@
 import 'dart:async';
-import 'package:just_audio/just_audio.dart';
-import '../../domain/entities/track_entity.dart';
 
-/// Playback state — immutable snapshot consumed by Riverpod providers.
+import 'package:media_kit/media_kit.dart';
+
+import '../../domain/entities/track_entity.dart';
+import '../../domain/repositories/music_repository.dart';
+
+enum TrackRepeatMode { none, one, all }
+
+/// Immutable playback state snapshot consumed by Riverpod providers.
 class PlaybackState {
   const PlaybackState({
     this.currentTrack,
@@ -12,7 +17,7 @@ class PlaybackState {
     this.position = Duration.zero,
     this.bufferedPosition = Duration.zero,
     this.shuffleEnabled = false,
-    this.repeatMode = RepeatMode.none,
+    this.repeatMode = TrackRepeatMode.none,
   });
 
   final TrackEntity? currentTrack;
@@ -22,7 +27,7 @@ class PlaybackState {
   final Duration position;
   final Duration bufferedPosition;
   final bool shuffleEnabled;
-  final RepeatMode repeatMode;
+  final TrackRepeatMode repeatMode;
 
   bool get hasTrack => currentTrack != null;
   bool get isQueueEmpty => queue.isEmpty;
@@ -35,7 +40,7 @@ class PlaybackState {
     Duration? position,
     Duration? bufferedPosition,
     bool? shuffleEnabled,
-    RepeatMode? repeatMode,
+    TrackRepeatMode? repeatMode,
     bool clearCurrentTrack = false,
   }) {
     return PlaybackState(
@@ -52,91 +57,93 @@ class PlaybackState {
   }
 }
 
-enum RepeatMode { none, one, all }
-
-/// Wraps just_audio's AudioPlayer with a clean observable interface.
+/// Audio playback service backed by media_kit.
 ///
-/// Design decisions:
-/// - AudioPlayer is a singleton within this service — not recreated per track.
-///   Recreating AudioPlayer causes audio session drops on Android.
-/// - State is exposed as a Stream<PlaybackState>, not direct AudioPlayer access.
-///   This isolates just_audio's API from the rest of the app.
-/// - Queue management is handled here, not in the UI layer.
-/// - Position polling via Timer at 250ms interval — sufficient for seekbar UX
-///   without excessive rebuild pressure.
-/// - No audio_service background integration yet (Phase 5b).
-///   Foreground playback only. Background audio is a future enhancement.
+/// Design:
+/// - Single Player instance — never recreated between tracks.
+/// - State emitted as `Stream<PlaybackState>` — UI never touches Player directly.
+/// - Position polled via media_kit's built-in stream — no manual Timer needed.
 class AudioPlayerService {
-  AudioPlayerService() {
+  AudioPlayerService(this._repo) {
     _init();
   }
 
-  late final AudioPlayer _player;
+  final MusicRepository _repo;
+  late final Player _player;
   final _stateController = StreamController<PlaybackState>.broadcast();
+  final List<StreamSubscription<dynamic>> _subs = [];
 
   PlaybackState _state = const PlaybackState();
-  Timer? _positionTimer;
+  int _lastPersistedPositionMs = 0;
 
   Stream<PlaybackState> get stateStream => _stateController.stream;
   PlaybackState get currentState => _state;
 
   void _init() {
-    _player = AudioPlayer();
+    _player = Player();
 
-    // Mirror just_audio's playing state
-    _player.playingStream.listen((playing) {
+    // Playing state
+    _subs.add(_player.stream.playing.listen((playing) {
       _emit(_state.copyWith(isPlaying: playing));
-      if (playing) {
-        _startPositionTimer();
-      } else {
-        _stopPositionTimer();
+    }));
+
+    // Duration updates
+    _subs.add(_player.stream.duration.listen((duration) {
+      if (_state.queue.isEmpty || duration == Duration.zero) return;
+      final ms = duration.inMilliseconds;
+      final current = _state.currentTrack;
+      if (current == null || current.durationMs == ms) return;
+
+      final updatedTrack = current.copyWith(durationMs: ms);
+      final updatedQueue = List<TrackEntity>.from(_state.queue);
+      if (_state.currentIndex >= 0 && _state.currentIndex < updatedQueue.length) {
+        updatedQueue[_state.currentIndex] = updatedTrack;
       }
-    });
 
-    // Handle track completion
-    _player.processingStateStream.listen((processingState) {
-      if (processingState == ProcessingState.completed) {
-        _handleTrackCompleted();
-      }
-    });
-  }
+      _emit(_state.copyWith(
+        currentTrack: updatedTrack,
+        queue: updatedQueue,
+      ));
 
-  void _startPositionTimer() {
-    _positionTimer?.cancel();
-    _positionTimer = Timer.periodic(
-      const Duration(milliseconds: 250),
-      (_) {
-        _emit(_state.copyWith(
-          position: _player.position,
-          bufferedPosition: _player.bufferedPosition,
-        ));
-      },
-    );
-  }
+      // Persist duration to DB (fire-and-forget)
+      unawaited(_repo.setTrackDuration(updatedTrack.id, ms));
+    }));
 
-  void _stopPositionTimer() {
-    _positionTimer?.cancel();
-    _positionTimer = null;
+    // Position
+    _subs.add(_player.stream.position.listen((pos) {
+      _emit(_state.copyWith(position: pos));
+      _maybePersistPosition(pos);
+    }));
+
+    // Buffered position
+    _subs.add(_player.stream.buffer.listen((buf) {
+      _emit(_state.copyWith(bufferedPosition: buf));
+    }));
+
+    // Track completed
+    _subs.add(_player.stream.completed.listen((completed) {
+      if (completed) _handleTrackCompleted();
+    }));
   }
 
   void _emit(PlaybackState newState) {
     _state = newState;
-    _stateController.add(_state);
+    if (!_stateController.isClosed) {
+      _stateController.add(_state);
+    }
   }
 
   void _handleTrackCompleted() {
     switch (_state.repeatMode) {
-      case RepeatMode.one:
+      case TrackRepeatMode.one:
         _player.seek(Duration.zero);
         _player.play();
-        break;
-      case RepeatMode.all:
+      case TrackRepeatMode.all:
         if (_state.queue.isNotEmpty) {
           final next = (_state.currentIndex + 1) % _state.queue.length;
           playFromQueue(next);
         }
-        break;
-      case RepeatMode.none:
+      case TrackRepeatMode.none:
         if (_state.currentIndex < _state.queue.length - 1) {
           playFromQueue(_state.currentIndex + 1);
         } else {
@@ -145,11 +152,14 @@ class AudioPlayerService {
             position: Duration.zero,
           ));
         }
-        break;
+    }
+    final current = _state.currentTrack;
+    if (current != null) {
+      unawaited(_repo.setLastPosition(current.id, 0));
     }
   }
 
-  // ── Public API ─────────────────────────────────────────────────────────
+  // ── Public API ───────────────────────────────────────────────────────────
 
   Future<void> playTrack(TrackEntity track) async {
     await playQueue([track], startIndex: 0);
@@ -167,14 +177,16 @@ class AudioPlayerService {
       queue: queue,
       currentIndex: clamped,
       currentTrack: track,
+      position: Duration.zero,
     ));
+    _lastPersistedPositionMs = 0;
 
     try {
-      await _player.setFilePath(track.path);
+      await _player.open(Media(track.path));
+      await _maybeResumePosition(track);
       await _player.play();
     } catch (_) {
-      // File not found or codec error — skip silently
-      // TODO: emit error state for UI to show snackbar
+      await _handleOpenFailure(track);
     }
   }
 
@@ -184,12 +196,15 @@ class AudioPlayerService {
     _emit(_state.copyWith(
       currentIndex: index,
       currentTrack: track,
+      position: Duration.zero,
     ));
+    _lastPersistedPositionMs = 0;
     try {
-      await _player.setFilePath(track.path);
+      await _player.open(Media(track.path));
+      await _maybeResumePosition(track);
       await _player.play();
     } catch (_) {
-      // Skip unplayable track
+      await _handleOpenFailure(track);
     }
   }
 
@@ -197,15 +212,10 @@ class AudioPlayerService {
   Future<void> pause() async => _player.pause();
 
   Future<void> togglePlayPause() async {
-    if (_player.playing) {
-      await _player.pause();
-    } else {
-      await _player.play();
-    }
+    _state.isPlaying ? await _player.pause() : await _player.play();
   }
 
-  Future<void> seekTo(Duration position) async =>
-      _player.seek(position);
+  Future<void> seekTo(Duration position) async => _player.seek(position);
 
   Future<void> skipNext() async {
     if (_state.queue.isEmpty) return;
@@ -217,12 +227,12 @@ class AudioPlayerService {
 
   Future<void> skipPrevious() async {
     if (_state.queue.isEmpty) return;
-    // If >3 seconds in, restart current. Otherwise go to previous.
-    if (_player.position.inSeconds > 3) {
+    if (_state.position.inSeconds > 3) {
       await _player.seek(Duration.zero);
       return;
     }
-    final prev = (_state.currentIndex - 1).clamp(0, _state.queue.length - 1);
+    final prev =
+        (_state.currentIndex - 1).clamp(0, _state.queue.length - 1);
     await playFromQueue(prev);
   }
 
@@ -231,13 +241,21 @@ class AudioPlayerService {
   }
 
   void cycleRepeatMode() {
-    final next = RepeatMode.values[
-        (_state.repeatMode.index + 1) % RepeatMode.values.length];
+    final next = TrackRepeatMode.values[
+        (_state.repeatMode.index + 1) % TrackRepeatMode.values.length];
     _emit(_state.copyWith(repeatMode: next));
   }
 
   void addToQueue(TrackEntity track) {
-    final updated = [..._state.queue, track];
+    _emit(_state.copyWith(queue: [..._state.queue, track]));
+  }
+
+  void addNext(TrackEntity track) {
+    final updated = [..._state.queue];
+    final insertAt = _state.queue.isEmpty
+        ? 0
+        : (_state.currentIndex + 1).clamp(0, updated.length);
+    updated.insert(insertAt, track);
     _emit(_state.copyWith(queue: updated));
   }
 
@@ -245,9 +263,28 @@ class AudioPlayerService {
     if (index < 0 || index >= _state.queue.length) return;
     final updated = [..._state.queue]..removeAt(index);
     final newIndex = index <= _state.currentIndex
-        ? (_state.currentIndex - 1).clamp(0, updated.length - 1)
+        ? (_state.currentIndex - 1)
+            .clamp(0, updated.isEmpty ? 0 : updated.length - 1)
         : _state.currentIndex;
     _emit(_state.copyWith(queue: updated, currentIndex: newIndex));
+  }
+
+  void moveInQueue(int oldIndex, int newIndex) {
+    if (oldIndex < 0 || oldIndex >= _state.queue.length) return;
+    if (newIndex < 0 || newIndex >= _state.queue.length) return;
+    final updated = [..._state.queue];
+    final item = updated.removeAt(oldIndex);
+    updated.insert(newIndex, item);
+
+    var currentIndex = _state.currentIndex;
+    if (oldIndex == currentIndex) {
+      currentIndex = newIndex;
+    } else {
+      if (oldIndex < currentIndex) currentIndex--;
+      if (newIndex <= currentIndex) currentIndex++;
+    }
+
+    _emit(_state.copyWith(queue: updated, currentIndex: currentIndex));
   }
 
   int _randomIndex() {
@@ -255,12 +292,40 @@ class AudioPlayerService {
     int next;
     do {
       next = DateTime.now().millisecondsSinceEpoch % _state.queue.length;
-    } while (next == _state.currentIndex && _state.queue.length > 1);
+    } while (next == _state.currentIndex);
     return next;
   }
 
+  Future<void> _maybeResumePosition(TrackEntity track) async {
+    if (track.lastPositionMs <= 5000) return;
+    try {
+      await _player.seek(Duration(milliseconds: track.lastPositionMs));
+    } catch (_) {
+      // ignore seek failures
+    }
+  }
+
+  void _maybePersistPosition(Duration pos) {
+    final current = _state.currentTrack;
+    if (current == null) return;
+    final ms = pos.inMilliseconds;
+    if ((ms - _lastPersistedPositionMs).abs() < 2000) return;
+    _lastPersistedPositionMs = ms;
+    unawaited(_repo.setLastPosition(current.id, ms));
+  }
+
+  Future<void> _handleOpenFailure(TrackEntity track) async {
+    _emit(_state.copyWith(isPlaying: false));
+    unawaited(_repo.markTrackUnavailable(track.id));
+    if (_state.queue.length > 1) {
+      await skipNext();
+    }
+  }
+
   Future<void> dispose() async {
-    _stopPositionTimer();
+    for (final sub in _subs) {
+      await sub.cancel();
+    }
     await _player.dispose();
     await _stateController.close();
   }

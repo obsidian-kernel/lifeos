@@ -8,7 +8,7 @@ sealed class AppError {
   const AppError(this.message, {this.cause});
 
   @override
-  String toString() => '${runtimeType}: $message';
+  String toString() => '$runtimeType: $message';
 }
 
 /// Thrown when any database read/write/delete operation fails.

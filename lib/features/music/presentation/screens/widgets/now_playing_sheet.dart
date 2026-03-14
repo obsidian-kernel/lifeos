@@ -3,7 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../../../../../core/theme/app_colors.dart';
 import '../../../../../core/theme/app_typography.dart';
-import '../../../data/services/audio_player_service.dart' as audio_service;
+import '../../../data/services/audio_player_service.dart'
+    show PlaybackState, TrackRepeatMode;
 import '../../providers/music_providers.dart';
 
 class NowPlayingSheet extends ConsumerWidget {
@@ -50,9 +51,8 @@ class _NowPlayingContent extends ConsumerWidget {
     final track = state.currentTrack!;
     final durationMs = track.durationMs;
     final positionMs = state.position.inMilliseconds;
-    final sliderValue = durationMs > 0
-        ? (positionMs / durationMs).clamp(0.0, 1.0)
-        : 0.0;
+    final sliderValue =
+        durationMs > 0 ? (positionMs / durationMs).clamp(0.0, 1.0) : 0.0;
 
     return SingleChildScrollView(
       controller: scrollController,
@@ -92,9 +92,8 @@ class _NowPlayingContent extends ConsumerWidget {
             // Track info
             Text(
               track.title,
-              style: AppTypography.displayMedium.copyWith(
-                color: AppColors.onBackground,
-              ),
+              style: AppTypography.displayMedium
+                  .copyWith(color: AppColors.onBackground),
               textAlign: TextAlign.center,
               maxLines: 2,
               overflow: TextOverflow.ellipsis,
@@ -102,18 +101,16 @@ class _NowPlayingContent extends ConsumerWidget {
             const SizedBox(height: 6),
             Text(
               track.displayArtist,
-              style: AppTypography.bodyLarge.copyWith(
-                color: AppColors.onSurfaceMuted,
-              ),
+              style: AppTypography.bodyLarge
+                  .copyWith(color: AppColors.onSurfaceMuted),
               textAlign: TextAlign.center,
             ),
             if (track.album != null) ...[
               const SizedBox(height: 2),
               Text(
                 track.displayAlbum,
-                style: AppTypography.labelSmall.copyWith(
-                  color: AppColors.onSurfaceDisabled,
-                ),
+                style: AppTypography.labelSmall
+                    .copyWith(color: AppColors.onSurfaceDisabled),
                 textAlign: TextAlign.center,
               ),
             ],
@@ -132,12 +129,14 @@ class _NowPlayingContent extends ConsumerWidget {
               ),
               child: Slider(
                 value: sliderValue,
-                onChanged: (v) {
-                  final targetMs = (v * durationMs).round();
-                  ref
-                      .read(playerActionsProvider.notifier)
-                      .seekTo(Duration(milliseconds: targetMs));
-                },
+                onChanged: durationMs > 0
+                    ? (v) {
+                        final targetMs = (v * durationMs).round();
+                        ref.read(playerActionsProvider.notifier).seekTo(
+                              Duration(milliseconds: targetMs),
+                            );
+                      }
+                    : null,
               ),
             ),
 
@@ -178,8 +177,11 @@ class _NowPlayingContent extends ConsumerWidget {
                 ),
                 // Previous
                 IconButton(
-                  icon: const Icon(Icons.skip_previous_rounded,
-                      color: AppColors.onSurface, size: 32),
+                  icon: const Icon(
+                    Icons.skip_previous_rounded,
+                    color: AppColors.onSurface,
+                    size: 32,
+                  ),
                   onPressed: () =>
                       ref.read(playerActionsProvider.notifier).skipPrevious(),
                 ),
@@ -199,14 +201,18 @@ class _NowPlayingContent extends ConsumerWidget {
                       color: Colors.white,
                       size: 32,
                     ),
-                    onPressed: () =>
-                        ref.read(playerActionsProvider.notifier).togglePlayPause(),
+                    onPressed: () => ref
+                        .read(playerActionsProvider.notifier)
+                        .togglePlayPause(),
                   ),
                 ),
                 // Next
                 IconButton(
-                  icon: const Icon(Icons.skip_next_rounded,
-                      color: AppColors.onSurface, size: 32),
+                  icon: const Icon(
+                    Icons.skip_next_rounded,
+                    color: AppColors.onSurface,
+                    size: 32,
+                  ),
                   onPressed: () =>
                       ref.read(playerActionsProvider.notifier).skipNext(),
                 ),
@@ -214,16 +220,23 @@ class _NowPlayingContent extends ConsumerWidget {
                 IconButton(
                   icon: Icon(
                     _repeatIcon(state.repeatMode),
-                    color: state.repeatMode != audio_service.RepeatMode.none
+                    color: state.repeatMode != TrackRepeatMode.none
                         ? AppColors.accent
                         : AppColors.onSurfaceMuted,
                     size: 22,
                   ),
-                  onPressed: () =>
-                      ref.read(playerActionsProvider.notifier).cycleRepeatMode(),
+                  onPressed: () => ref
+                      .read(playerActionsProvider.notifier)
+                      .cycleRepeatMode(),
                 ),
               ],
             ),
+            if (state.queue.length > 1) ...[
+              const SizedBox(height: 16),
+              _UpNextList(
+                state: state,
+              ),
+            ],
           ],
         ),
       ),
@@ -236,11 +249,89 @@ class _NowPlayingContent extends ConsumerWidget {
     return '$m:$s';
   }
 
-  IconData _repeatIcon(audio_service.RepeatMode mode) {
-    return switch (mode) {
-      audio_service.RepeatMode.none => Icons.repeat_rounded,
-      audio_service.RepeatMode.all => Icons.repeat_rounded,
-      audio_service.RepeatMode.one => Icons.repeat_one_rounded,
-    };
+  IconData _repeatIcon(TrackRepeatMode mode) {
+  return switch (mode) {
+    TrackRepeatMode.none => Icons.repeat_rounded,
+    TrackRepeatMode.all  => Icons.repeat_rounded,
+    TrackRepeatMode.one  => Icons.repeat_one_rounded,
+  };
+  }
+}
+
+class _UpNextList extends ConsumerWidget {
+  const _UpNextList({required this.state});
+
+  final PlaybackState state;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final actions = ref.read(playerActionsProvider.notifier);
+    final items = state.queue;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(
+              'Up Next',
+              style: AppTypography.titleMedium
+                  .copyWith(color: AppColors.onBackground),
+            ),
+            Text('${items.length - 1} tracks',
+                style: AppTypography.labelSmall
+                    .copyWith(color: AppColors.onSurfaceMuted)),
+          ],
+        ),
+        const SizedBox(height: 8),
+        ListView.separated(
+          physics: const NeverScrollableScrollPhysics(),
+          shrinkWrap: true,
+          itemCount: items.length - 1,
+          separatorBuilder: (_, __) => const Divider(
+            height: 1,
+            color: AppColors.border,
+          ),
+          itemBuilder: (_, i) {
+            final index = i + 1; // skip current
+            final track = items[index];
+            return ListTile(
+              dense: true,
+              contentPadding: EdgeInsets.zero,
+              title: Text(
+                track.title,
+                style: AppTypography.bodyMedium
+                    .copyWith(color: AppColors.onBackground),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              subtitle: Text(
+                track.displayArtist,
+                style: AppTypography.labelSmall
+                    .copyWith(color: AppColors.onSurfaceMuted),
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+              ),
+              trailing: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  IconButton(
+                    icon: const Icon(Icons.play_arrow_rounded,
+                        color: AppColors.onSurface, size: 20),
+                    onPressed: () => actions.playFromQueue(index),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded,
+                        color: AppColors.onSurfaceMuted, size: 18),
+                    onPressed: () => actions.removeFromQueue(index),
+                  ),
+                ],
+              ),
+              onTap: () => actions.playFromQueue(index),
+            );
+          },
+        ),
+      ],
+    );
   }
 }

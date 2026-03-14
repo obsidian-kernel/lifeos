@@ -23,6 +23,9 @@ abstract interface class MusicRepository {
 
   /// Increment play count and update lastPlayedAt.
   Future<Result<void>> recordPlay(String trackId);
+  Future<Result<void>> setTrackDuration(String trackId, int durationMs);
+  Future<Result<void>> setLastPosition(String trackId, int positionMs);
+  Future<Result<void>> markTrackUnavailable(String trackId);
 
   // ── Playlists ─────────────────────────────────────────────────────────
 

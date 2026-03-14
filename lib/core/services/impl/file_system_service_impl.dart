@@ -188,7 +188,6 @@ class FileSystemServiceImpl implements FileSystemService {
     final dir = Directory(directoryPath);
     return dir
         .watch(recursive: true)
-        .where((event) => event is FileSystemEvent)
         .map((event) => event.path)
         .handleError((_) {
       // Directory watcher errors (e.g. directory deleted) are swallowed.

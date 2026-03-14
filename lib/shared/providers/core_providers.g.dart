@@ -25,7 +25,7 @@ final appDatabaseProvider = Provider<AppDatabase>.internal(
 // ignore: unused_element
 typedef AppDatabaseRef = ProviderRef<AppDatabase>;
 String _$notificationServiceHash() =>
-    r'5559dd0208e87c97ec022465d2cae508f3920c60';
+    r'29b07c37284e78c5c58303bcd0f85dfc0650b93d';
 
 /// Notification service singleton. Initialized once at startup.
 ///
